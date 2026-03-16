@@ -1,5 +1,6 @@
 import pandas as pd
 from langchain_core.tools import tool
+
 from dental_agent.config.settings import CSV_PATH, DATE_FORMAT
 
 
@@ -12,13 +13,15 @@ def _load_df() -> pd.DataFrame:
     df.columns = df.columns.str.strip()
     df["is_available"] = df["is_available"].astype(str).str.upper() == "TRUE"
     df["date_slot"] = pd.to_datetime(df["date_slot"], format="mixed", dayfirst=False)
-    df["doctor_name"] = df["doctor_name"].str.lower().str.strip()
-    df["specialization"] = df["specialization"].str.lower().str.strip()
+    df["doctor_name"] = df["doctor_name"].fillna("").astype(str).str.lower().str.strip()
+    df["specialization"] = df["specialization"].fillna("").astype(str).str.lower().str.strip()
     df["patient_to_attend"] = (
         df["patient_to_attend"]
+        .fillna("")
         .astype(str)
         .str.strip()
-        .str.replace(r"\.0$", "", regex=True)  # 1000082.0 → 1000082
+        .replace("nan", "")
+        .str.replace(r"\.0$", "", regex=True)
     )
     return df
 
@@ -29,18 +32,7 @@ def get_available_slots(
     doctor_name: str = "",
     date_filter: str = "",
 ) -> list:
-    """
-    Return available (is_available=TRUE) appointment slots.
-
-    Args:
-        specialization: Filter by specialization, e.g. 'orthodontist'. Leave empty to skip.
-        doctor_name: Filter by doctor name (case-insensitive), e.g. 'emily johnson'. Leave empty to skip.
-        date_filter: Filter by date string M/D/YYYY, e.g. '5/10/2026'. Leave empty to skip.
-
-    Returns:
-        List of dicts with keys: date_slot, specialization, doctor_name.
-        Returns at most 20 rows to keep response concise.
-    """
+    """Return available appointment slots."""
     df = _load_df()
     mask = df["is_available"]
 
@@ -62,15 +54,7 @@ def get_available_slots(
 
 @tool
 def get_patient_appointments(patient_id: str) -> list:
-    """
-    Return all booked appointments for a given patient ID.
-
-    Args:
-        patient_id: Numeric patient ID string, e.g. '1000082'.
-
-    Returns:
-        List of dicts with keys: date_slot, specialization, doctor_name, patient_to_attend.
-    """
+    """Return all booked appointments for a given patient ID."""
     df = _load_df()
     mask = df["patient_to_attend"] == str(patient_id).strip()
     result = df[mask][["date_slot", "specialization", "doctor_name", "patient_to_attend"]].copy()
@@ -80,16 +64,7 @@ def get_patient_appointments(patient_id: str) -> list:
 
 @tool
 def check_slot_availability(doctor_name: str, date_slot: str) -> dict:
-    """
-    Check if a specific doctor slot is available.
-
-    Args:
-        doctor_name: Doctor name, e.g. 'emily johnson'.
-        date_slot: Slot string in M/D/YYYY H:MM format, e.g. '5/10/2026 9:00'.
-
-    Returns:
-        Dict with keys: found (bool), is_available (bool), patient_to_attend (str).
-    """
+    """Check if a specific doctor slot is available."""
     df = _load_df()
     try:
         target_dt = pd.to_datetime(date_slot, format="mixed", dayfirst=False)
@@ -106,21 +81,13 @@ def check_slot_availability(doctor_name: str, date_slot: str) -> dict:
     return {
         "found": True,
         "is_available": bool(row["is_available"]),
-        "patient_to_attend": row["patient_to_attend"],
+        "patient_to_attend": row["patient_to_attend"] or "",
     }
 
 
 @tool
 def list_doctors_by_specialization(specialization: str) -> list:
-    """
-    Return distinct doctor names for a given specialization.
-
-    Args:
-        specialization: e.g. 'orthodontist'.
-
-    Returns:
-        Sorted list of doctor name strings.
-    """
+    """Return distinct doctor names for a given specialization."""
     df = _load_df()
     mask = df["specialization"] == specialization.lower().strip()
     return sorted(df[mask]["doctor_name"].unique().tolist())

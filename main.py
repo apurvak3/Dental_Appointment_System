@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from langchain_core.messages import HumanMessage, AIMessageChunk
 from dental_agent.agent import dental_graph
 
@@ -11,9 +11,12 @@ def home():
     return render_template("index.html")
 
 
-@app.route("/chat", methods=["POST"])
+@app.route("/chat", methods=["GET", "POST"])
 def chat():
     global history
+
+    if request.method == "GET":
+        return redirect(url_for("home"))
 
     user_input = request.json.get("message")
 

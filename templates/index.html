@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dental Appointment Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="chat-shell">
+        <aside class="hero-panel">
+            <div>
+                <p class="eyebrow">Dental Care Concierge</p>
+                <h1>Appointments, handled with a calmer interface.</h1>
+                <p class="lead">
+                    Check availability, book with the right specialist, cancel safely,
+                    or move an appointment without digging through menus.
+                </p>
+
+                <div class="feature-list">
+                    <div class="feature">
+                        <strong>Smart scheduling</strong>
+                        <span>Ask naturally and get help with booking or rescheduling in one place.</span>
+                    </div>
+                    <div class="feature">
+                        <strong>Doctor availability</strong>
+                        <span>Find specializations, open slots, and existing appointments quickly.</span>
+                    </div>
+                    <div class="feature">
+                        <strong>Built for follow-up</strong>
+                        <span>The conversation stays visible, so next actions are easier to track.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-pill">Live assistant for dental scheduling</div>
+        </aside>
+
+        <section class="chat-card">
+            <header class="chat-header">
+                <div>
+                    <h2>Dental Appointment Assistant</h2>
+                    <p>Ask about availability, bookings, cancellations, or rescheduling.</p>
+                </div>
+                <div class="avatar">DA</div>
+            </header>
+
+            <div id="messages" class="messages">
+                <div class="message bot">How can I help with your dental appointment today?</div>
+                <div id="typing-indicator" class="typing" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <form id="chat-form" class="chat-form">
+                <div class="input-wrap">
+                    <textarea
+                        id="message-input"
+                        name="message"
+                        rows="1"
+                        placeholder="Describe what you need, for example: Book me with an orthodontist next week."
+                        autocomplete="off"
+                        required
+                    ></textarea>
+                    <button id="send-button" type="submit">Send</button>
+                </div>
+                <p class="note">Press Enter to send. Use Shift + Enter for a new line.</p>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        const form = document.getElementById("chat-form");
+        const input = document.getElementById("message-input");
+        const messages = document.getElementById("messages");
+        const typing = document.getElementById("typing-indicator");
+        const sendButton = document.getElementById("send-button");
+
+        function autoResize() {
+            input.style.height = "auto";
+            input.style.height = `${Math.min(input.scrollHeight, 144)}px`;
+        }
+
+        function addMessage(text, sender) {
+            const node = document.createElement("div");
+            node.className = `message ${sender}`;
+            node.textContent = text;
+            messages.insertBefore(node, typing);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function setLoading(isLoading) {
+            typing.classList.toggle("visible", isLoading);
+            typing.setAttribute("aria-hidden", String(!isLoading));
+            sendButton.disabled = isLoading;
+        }
+
+        input.addEventListener("input", autoResize);
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                form.requestSubmit();
+            }
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const text = input.value.trim();
+            if (!text) return;
+
+            addMessage(text, "user");
+            input.value = "";
+            autoResize();
+            setLoading(true);
+
+            try {
+                const response = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: text })
+                });
+
+                const data = await response.json();
+                addMessage(data.response || "No response generated.", "bot");
+            } catch (error) {
+                addMessage("Request failed. Check the server logs and API key.", "bot");
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        autoResize();
+    </script>
+</body>
+</html>

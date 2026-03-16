@@ -6,3 +6,4 @@ langchain-core
 pandas
 pydantic
 python-dotenv
+gunicorn

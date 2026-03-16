@@ -1,5 +1,6 @@
 import pandas as pd
 from langchain_core.tools import tool
+
 from dental_agent.config.settings import CSV_PATH, DATE_FORMAT
 
 
@@ -12,13 +13,15 @@ def _load_df() -> pd.DataFrame:
     df.columns = df.columns.str.strip()
     df["is_available"] = df["is_available"].astype(str).str.upper() == "TRUE"
     df["date_slot"] = pd.to_datetime(df["date_slot"], format="mixed", dayfirst=False)
-    df["doctor_name"] = df["doctor_name"].str.lower().str.strip()
-    df["specialization"] = df["specialization"].str.lower().str.strip()
+    df["doctor_name"] = df["doctor_name"].fillna("").astype(str).str.lower().str.strip()
+    df["specialization"] = df["specialization"].fillna("").astype(str).str.lower().str.strip()
     df["patient_to_attend"] = (
         df["patient_to_attend"]
+        .fillna("")
         .astype(str)
         .str.strip()
-        .str.replace(r"\.0$", "", regex=True)  # 1000082.0 → 1000082
+        .replace("nan", "")
+        .str.replace(r"\.0$", "", regex=True)
     )
     return df
 
@@ -29,6 +32,9 @@ def _save_df(df: pd.DataFrame) -> None:
     out["is_available"] = out["is_available"].map({True: "TRUE", False: "FALSE"})
     out["patient_to_attend"] = (
         out["patient_to_attend"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
         .replace("nan", "")
         .str.replace(r"\.0$", "", regex=True)
     )
@@ -37,17 +43,7 @@ def _save_df(df: pd.DataFrame) -> None:
 
 @tool
 def book_appointment(patient_id: str, doctor_name: str, date_slot: str) -> dict:
-    """
-    Book an appointment: mark slot as unavailable and assign patient_id.
-
-    Args:
-        patient_id: Numeric patient ID string, e.g. '1000082'.
-        doctor_name: Doctor name (case-insensitive), e.g. 'emily johnson'.
-        date_slot: Slot in M/D/YYYY H:MM format, e.g. '5/10/2026 9:00'.
-
-    Returns:
-        Dict with keys: success (bool), message (str).
-    """
+    """Book an appointment: mark slot as unavailable and assign patient_id."""
     df = _load_df()
     try:
         target_dt = pd.to_datetime(date_slot, format="mixed", dayfirst=False)
@@ -74,16 +70,7 @@ def book_appointment(patient_id: str, doctor_name: str, date_slot: str) -> dict:
 
 @tool
 def cancel_appointment(patient_id: str, date_slot: str) -> dict:
-    """
-    Cancel an appointment: mark slot available and clear patient_id.
-
-    Args:
-        patient_id: Patient whose appointment to cancel.
-        date_slot: Slot in M/D/YYYY H:MM format to cancel.
-
-    Returns:
-        Dict with keys: success (bool), message (str).
-    """
+    """Cancel an appointment: mark slot available and clear patient_id."""
     df = _load_df()
     try:
         target_dt = pd.to_datetime(date_slot, format="mixed", dayfirst=False)
@@ -91,21 +78,29 @@ def cancel_appointment(patient_id: str, date_slot: str) -> dict:
         return {"success": False, "message": f"Invalid date_slot format: {date_slot}"}
 
     pid = str(patient_id).strip()
-    mask = (
+    rows = df[
         (df["patient_to_attend"] == pid)
         & (df["date_slot"] == target_dt)
         & (~df["is_available"])
-    )
-    rows = df[mask]
+    ]
 
     if rows.empty:
         return {
             "success": False,
             "message": f"No booked appointment found for patient {patient_id} at {date_slot}.",
         }
+    if len(rows) > 1:
+        return {
+            "success": False,
+            "message": (
+                "Multiple appointments matched this patient and time. "
+                "Please specify the doctor name before cancelling."
+            ),
+        }
 
-    df.loc[mask, "is_available"] = True
-    df.loc[mask, "patient_to_attend"] = ""
+    row_index = rows.index[0]
+    df.loc[row_index, "is_available"] = True
+    df.loc[row_index, "patient_to_attend"] = ""
     _save_df(df)
     return {
         "success": True,
@@ -120,18 +115,7 @@ def reschedule_appointment(
     new_date_slot: str,
     doctor_name: str,
 ) -> dict:
-    """
-    Reschedule by cancelling the old slot and booking a new one atomically.
-
-    Args:
-        patient_id: Patient whose appointment to reschedule.
-        current_date_slot: Existing booked slot to vacate (M/D/YYYY H:MM).
-        new_date_slot: Desired new slot (M/D/YYYY H:MM).
-        doctor_name: Doctor name (must match the booking's doctor).
-
-    Returns:
-        Dict with keys: success (bool), message (str).
-    """
+    """Reschedule by cancelling the old slot and booking a new one atomically."""
     df = _load_df()
     try:
         current_dt = pd.to_datetime(current_date_slot, format="mixed", dayfirst=False)
@@ -142,15 +126,27 @@ def reschedule_appointment(
     doc = doctor_name.lower().strip()
     pid = str(patient_id).strip()
 
-    old_mask = (
+    old_rows = df[
         (df["patient_to_attend"] == pid)
         & (df["date_slot"] == current_dt)
+        & (df["doctor_name"] == doc)
         & (~df["is_available"])
-    )
-    if df[old_mask].empty:
+    ]
+    if old_rows.empty:
         return {
             "success": False,
-            "message": f"No existing booking found for patient {pid} at {current_date_slot}.",
+            "message": (
+                f"No existing booking found for patient {pid} at "
+                f"{current_date_slot} with {doctor_name}."
+            ),
+        }
+    if len(old_rows) > 1:
+        return {
+            "success": False,
+            "message": (
+                "Multiple current appointments matched this patient, doctor, and time. "
+                "Please review the CSV for duplicate rows."
+            ),
         }
 
     new_mask = (df["doctor_name"] == doc) & (df["date_slot"] == new_dt)
@@ -160,8 +156,9 @@ def reschedule_appointment(
     if not new_rows.iloc[0]["is_available"]:
         return {"success": False, "message": f"Slot {new_date_slot} is already taken."}
 
-    df.loc[old_mask, "is_available"] = True
-    df.loc[old_mask, "patient_to_attend"] = ""
+    old_index = old_rows.index[0]
+    df.loc[old_index, "is_available"] = True
+    df.loc[old_index, "patient_to_attend"] = ""
     df.loc[new_mask, "is_available"] = False
     df.loc[new_mask, "patient_to_attend"] = pid
     _save_df(df)

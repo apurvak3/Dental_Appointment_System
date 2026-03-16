@@ -1,7 +1,8 @@
+import os
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
-from dental_agent.config.settings import GOOGLE_API_KEY, MODEL_NAME, TEMPERATURE
 from dental_agent.models.state import AppointmentState, RouteTarget
 from dental_agent.utils import sanitize_messages
 
@@ -48,9 +49,9 @@ SUPERVISOR_PROMPT = ChatPromptTemplate.from_messages([
 
 def supervisor_node(state: AppointmentState) -> dict:
     llm = ChatGoogleGenerativeAI(
-        api_key=GOOGLE_API_KEY,
-        model=MODEL_NAME,
-        temperature=TEMPERATURE,
+        model="gemini-2.0-flash",
+        google_api_key=os.getenv("GOOGLE_API_KEY"),
+        temperature=0,
     ).with_structured_output(SupervisorDecision)
 
     chain = SUPERVISOR_PROMPT | llm

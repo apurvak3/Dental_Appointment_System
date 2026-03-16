@@ -7,7 +7,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # project root
 CSV_PATH = str(BASE_DIR / "doctor_availability.csv")
 
-GOOGLE_API_KEY = "API KEY"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1.5-flash")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0"))
 
