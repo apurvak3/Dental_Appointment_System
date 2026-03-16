@@ -1,0 +1,8 @@
+Flask
+langchain-google-genai
+google-generativeai
+langgraph
+langchain-core
+pandas
+pydantic
+python-dotenv
