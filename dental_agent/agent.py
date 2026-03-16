@@ -1,9 +1,7 @@
-import os
-
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
 
+from dental_agent.llm import build_llm
 from dental_agent.utils import sanitize_messages
 from dental_agent.tools.csv_reader import (
     get_available_slots,
@@ -60,11 +58,7 @@ def _pre_model_hook(state: dict) -> dict:
     sanitized = sanitize_messages(state["messages"])
     return {"llm_input_messages": [SystemMessage(content=SYSTEM_PROMPT)] + sanitized}
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-    temperature=0,
-)
+llm = build_llm()
 
 
 dental_graph = create_react_agent(model=llm, tools=TOOLS, pre_model_hook=_pre_model_hook)

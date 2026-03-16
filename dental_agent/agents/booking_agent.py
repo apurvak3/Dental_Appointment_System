@@ -1,9 +1,7 @@
-import os
-
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.prebuilt import ToolNode
 
+from dental_agent.llm import build_llm
 from dental_agent.models.state import AppointmentState
 from dental_agent.tools.csv_reader import get_available_slots, check_slot_availability
 from dental_agent.tools.csv_writer import book_appointment
@@ -48,11 +46,7 @@ booking_tool_node = ToolNode(tools=BOOKING_TOOLS)
 
 
 def booking_agent_node(state: AppointmentState) -> dict:
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=os.getenv("GOOGLE_API_KEY"),
-        temperature=0,
-    ).bind_tools(BOOKING_TOOLS)
+    llm = build_llm().bind_tools(BOOKING_TOOLS)
 
     chain = BOOKING_PROMPT | llm
     response = chain.invoke({"messages": sanitize_messages(state["messages"])})

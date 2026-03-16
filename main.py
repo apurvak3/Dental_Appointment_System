@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
-from langchain_core.messages import HumanMessage, AIMessageChunk
+from langchain_core.messages import HumanMessage, AIMessage
 from dental_agent.agent import dental_graph
 
 app = Flask(__name__)
@@ -22,28 +22,19 @@ def chat():
 
     history.append(HumanMessage(content=user_input))
 
-    final_messages = None
-    response_text = ""
-
-    for event_type, data in dental_graph.stream(
+    result = dental_graph.invoke(
         {"messages": history},
-        stream_mode=["messages", "values"],
         config={"recursion_limit": 20},
-    ):
-        if event_type == "messages":
-            chunk, meta = data
-            if (
-                isinstance(chunk, AIMessageChunk)
-                and chunk.content
-                and not getattr(chunk, "tool_calls", None)
-            ):
-                response_text += chunk.content
+    )
 
-        elif event_type == "values":
-            final_messages = data.get("messages", [])
+    final_messages = result.get("messages", [])
+    history = final_messages
 
-    if final_messages:
-        history = final_messages
+    response_text = ""
+    for message in reversed(final_messages):
+        if isinstance(message, AIMessage) and message.content and not getattr(message, "tool_calls", None):
+            response_text = str(message.content)
+            break
 
     return jsonify({"response": response_text})
 
